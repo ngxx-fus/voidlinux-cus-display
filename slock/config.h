@@ -2,22 +2,25 @@
 static const char *user  = "fus";
 static const char *group = "fus";
 
-/*Font settings for the time text*/
-static const float textsize=64.0;
-static const char* textfamily="serif";
-static const double textcolorred=255;
-static const double textcolorgreen=255;
-static const double textcolorblue=255;
- 
-
 static const char *colorname[NUMCOLS] = {
 	[INIT] =   "black",     /* after initialization */
 	[INPUT] =  "#005577",   /* during input */
-	[FAILED] = "#CC3333",   /* wrong password */
+	[FAILED] = "#cc3333",   /* wrong password */
 };
+
+/* lock screen opacity */
+static const float alpha = 0.5;
+static const int    lineHeight = 15;
 
 /* treat a cleared input like a wrong password (color) */
 static const int failonclear = 1;
 
-/* Background image path, should be available to the user above */
-static const char *background_image = "/home/fus/.fus/.BG/IMG_4263.JPG";
+/* default message */
+static const char * message  = "Enter password to continue!";
+static const char * wrongPW  = "Wrong password!";
+
+/* text color */
+static const char * text_color = "#ffffff";
+
+/* text size (must be a valid size) */
+static const char * text_size = "10x20";

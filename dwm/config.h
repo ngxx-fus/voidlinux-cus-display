@@ -113,7 +113,7 @@ static const Key keys[] = {
     // { MODKEY|ShiftMask,             XK_space,  togglefloating, {0} },
     { WINKEY|ShiftMask,             XK_f,       spawn,          SHCMD("/home/fus/.fus/prt_sc.sh --full") },
     { WINKEY|ShiftMask,             XK_w,       spawn,          SHCMD("/home/fus/.fus/prt_sc.sh --window") },
-    { WINKEY|ShiftMask,             XK_s,       spawn,          SHCMD("/home/fus/.fus/prt_sc.sh --area") },
+    { WINKEY|ShiftMask,             XK_s,       spawn,          SHCMD("/usr/bin/flameshot gui") },
     { WINKEY,                       XK_p,       spawn,          SHCMD("/home/fus/.fus/toggle_display.sh") },
     { WINKEY,                       XK_e,       spawn,          SHCMD("/usr/bin/thunar") },
     { WINKEY,                       XK_l,       spawn,          SHCMD("/usr/local/bin/slock") },
