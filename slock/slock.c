@@ -28,11 +28,18 @@
 char *argv0;
 
 /// MOD BY FUS //////////////////////////////////////////////
-char state;
-enum STATE_ENUM {
-    NOTHING = 0x0, 
-    TYPING, 
-    WRONG
+char myBuff[264];
+unsigned int slockStatus;
+
+#define __mask32(i) 	(1U<<(i))
+#define __inv_mask32(i) (~(1U<<(i)))
+#define __has_mask32(m)	& 	(m)
+#define __set_mask32(m)	|= 	(m)
+#define __clr_mask32(m) &= 	(~(m))
+
+enum SLOCK_STATUS_MASK{
+	SHOW_PW_MASK = 0x1,
+	UPDATE_SCR_MASK = 0x2
 };
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 struct displayData {
@@ -76,6 +83,7 @@ enum {
 	INIT,
 	INPUT,
 	FAILED,
+	INPUT_PW,
 	NUMCOLS
 };
 
@@ -114,7 +122,7 @@ die(const char *errstr, ...)
 int 		nscreens;
 Display 	*dpy;
 struct lock **locks;
-
+XFontStruct *fontinfo;
 
 void clearArea(Display *dpy, Window win, int x, int y, unsigned int width, unsigned int height) {
     XGCValues gc_values;
@@ -142,11 +150,10 @@ writeMessage(Display *dpy, Window win, int screen,
 {
     int len, line_len, width, i, j, k, tab_replace, tab_size;
     XGCValues gr_values;
-    XFontStruct *fontinfo;
+    
     XColor color, dummy;
     GC gc;
 
-    fontinfo = XLoadQueryFont(dpy, text_size);
     if (!fontinfo) return;
 
     int __lineHeight = (lineHeight < fontinfo->ascent + fontinfo->descent) ? 
@@ -175,6 +182,11 @@ writeMessage(Display *dpy, Window win, int screen,
     }
     if (line_len == 0) line_len = len;
 	for(int o = 0; o < monInfos.mons; ++o){
+		// printf("[writeMessage] outputID=%d\n", o);
+		// printf("[writeMessage] outputH=%d\n", monInfos.mon[o].scrHeight);
+		// printf("[writeMessage] outputW=%d\n", monInfos.mon[o].scrWidth);
+		// printf("[writeMessage] outputRow=%d\n", monInfos.mon[o].rowTopLeft);
+		// printf("[writeMessage] outputCol=%d\n\n", monInfos.mon[o].colTopLeft);
 		int screenW = monInfos.mon[o].scrWidth;
 		int screenH = monInfos.mon[o].scrHeight;
 		width = (screenW - XTextWidth(fontinfo, msg, line_len)) / 2;
@@ -218,8 +230,11 @@ refresh(Display *dpy, Window win, int screen, struct tm time)
             time.tm_hour, time.tm_min, time.tm_sec);
 
     XClearWindow(dpy, win);
-    writeMessage(dpy, win, screen, message, 0, 2);
-    writeMessage(dpy, win, screen, tm, 1, 2);
+    writeMessage(dpy, win, screen, myBuff, 1, lineCount);
+    writeMessage(dpy, win, screen, tm, 2, lineCount);
+    writeMessage(dpy, win, screen, infoMsg, 3, lineCount);
+    writeMessage(dpy, win, screen, blankMsg, 0, lineCount);
+	
     XFlush(dpy);
 }
 
@@ -360,48 +375,93 @@ readPW(struct displayData* dispData, struct xrandr *rr, struct lock **locks, int
 			    IsPFKey(ksym) ||
 			    IsPrivateKeypadKey(ksym))
 				continue;
+			failure = 0;
 			switch (ksym) {
-			case XK_Return:
-				passwd[len] = '\0';
-				errno = 0;
-				if (!(inputhash = crypt(passwd, hash)))
-					fprintf(stderr, "slock: crypt: %s\n", strerror(errno));
-				else
-					running = !!strcmp(inputhash, hash);
-				if (running) {
-					XBell(dpy, 100);
-					failure = 1;
-				}
-				explicit_bzero(&passwd, sizeof(passwd));
-				len = 0;
-				break;
-			case XK_Escape:
-				explicit_bzero(&passwd, sizeof(passwd));
-				len = 0;
-				break;
-			case XK_BackSpace:
-				if (len)
-					passwd[len--] = '\0';
-				break;
-			default:
-				if (num && !iscntrl((int)buf[0]) &&
-				    (len + num < sizeof(passwd))) {
-					memcpy(passwd + len, buf, num);
-					len += num;
-				}
-				break;
+				case XK_Return:
+					slockStatus __set_mask32(UPDATE_SCR_MASK);
+					passwd[len] = '\0';
+					errno = 0;
+					if (!(inputhash = crypt(passwd, hash)))
+						fprintf(stderr, "slock: crypt: %s\n", strerror(errno));
+					else
+						running = !!strcmp(inputhash, hash);
+					if (running) {
+						XBell(dpy, 100);
+						failure = 1;
+					}
+					explicit_bzero(&passwd, sizeof(passwd));
+					len = 0;
+					break;
+				case XK_Escape:
+					slockStatus __set_mask32(UPDATE_SCR_MASK);
+					explicit_bzero(&passwd, sizeof(passwd));
+					len = 0;
+					break;
+				case XK_BackSpace:
+					slockStatus __set_mask32(UPDATE_SCR_MASK);
+					if (len)
+						passwd[len--] = '\0';
+					break;
+				case XK_Alt_L:
+					slockStatus __set_mask32(UPDATE_SCR_MASK);
+					if(slockStatus __has_mask32(SHOW_PW_MASK))
+						slockStatus __clr_mask32(SHOW_PW_MASK);
+					else 
+						slockStatus __set_mask32(SHOW_PW_MASK);
+					break;
+				default:
+					if (num && !iscntrl((int)buf[0]) &&
+						(len + num < sizeof(passwd))) {
+						memcpy(passwd + len, buf, num);
+						len += num;
+					}
+					break;
 			}
-			color = len ? INPUT : ((failure || failonclear) ? FAILED : INIT);
-			if (running && oldc != color) {
+			if(len > 0){
+				if(slockStatus __has_mask32(SHOW_PW_MASK)){
+					snprintf(myBuff, sizeof(myBuff), "[%s] OKE?", passwd);
+					color = INPUT_PW;
+				}else{
+					snprintf(myBuff, sizeof(myBuff), "[%.*s] OKE?", len, stars);
+					color = INPUT;
+				}
 				for (screen = 0; screen < nscreens; screen++) {
 					XSetWindowBackground(dpy,
-					                     locks[screen]->win,
-					                     locks[screen]->colors[color]);
+											locks[screen]->win,
+											locks[screen]->colors[color]);
 					XClearWindow(dpy, locks[screen]->win);
+					// writeMessage(dpy, locks[screen]->win, screen, myBuff, 0, lineCount);
 					drawTime(dispData);
-					writeMessage(dpy, locks[screen]->win, screen, message, 0, 2);
+					// writeMessage(dpy, locks[screen]->win, screen, infoMsg, 2, lineCount);
 				}
-				oldc = color;
+			}else{
+				// color = len ? INPUT : ((failure || failOnClear) ? FAILED : INIT);
+				if(failure){
+					color = FAILED;
+					snprintf(myBuff, sizeof(myBuff), "%s", wrongPWMsg);
+				}else{
+					if(failOnClear){
+						color = FAILED;
+						snprintf(myBuff, sizeof(myBuff), "%s", defaultMsg);
+					}else{
+						color = INIT;
+						snprintf(myBuff, sizeof(myBuff), "%s", defaultMsg);
+					}
+				}
+				if ( running && ((oldc != color) || (slockStatus __has_mask32(UPDATE_SCR_MASK)))) {
+					for (screen = 0; screen < nscreens; screen++) {
+						XSetWindowBackground(dpy,
+							locks[screen]->win,
+							locks[screen]->colors[color]);
+							XClearWindow(dpy, locks[screen]->win);
+							drawTime(dispData);
+							// writeMessage(dpy, locks[screen]->win, screen, myBuff, 0, lineCount);
+							drawTime(dispData);
+							// writeMessage(dpy, locks[screen]->win, screen, infoMsg, 2, lineCount);
+					}
+					oldc = color;
+					slockStatus __clr_mask32(UPDATE_SCR_MASK);
+				}
 			}
 		} else if (rr->active && ev.type == rr->evbase + RRScreenChangeNotify) {
 			rre = (XRRScreenChangeNotifyEvent*)&ev;
@@ -416,95 +476,6 @@ readPW(struct displayData* dispData, struct xrandr *rr, struct lock **locks, int
 			XRaiseWindow(dpy, locks[screen]->win);
 	}
 }
-
-
-// static void
-// readPW(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
-//        const char *hash)
-// {
-// 	XRRScreenChangeNotifyEvent *rre;
-// 	char buf[32], passwd[256], *inputhash;
-// 	int num, screen, running, failure, oldc;
-// 	unsigned int len, color;
-// 	KeySym ksym;
-// 	XEvent ev;
-
-// 	len = 0;
-// 	running = 1;
-// 	failure = 0;
-// 	oldc = INIT;
-
-// 	while (running && !XNextEvent(dpy, &ev)) {
-// 		if (ev.type == KeyPress) {
-// 			explicit_bzero(&buf, sizeof(buf));
-// 			num = XLookupString(&ev.xkey, buf, sizeof(buf), &ksym, 0);
-// 			if (IsKeypadKey(ksym)) {
-// 				if (ksym == XK_KP_Enter)
-// 					ksym = XK_Return;
-// 				else if (ksym >= XK_KP_0 && ksym <= XK_KP_9)
-// 					ksym = (ksym - XK_KP_0) + XK_0;
-// 			}
-// 			if (IsFunctionKey(ksym) ||
-// 			    IsKeypadKey(ksym) ||
-// 			    IsMiscFunctionKey(ksym) ||
-// 			    IsPFKey(ksym) ||
-// 			    IsPrivateKeypadKey(ksym))
-// 				continue;
-// 			switch (ksym) {
-// 			case XK_Return:
-// 				passwd[len] = '\0';
-// 				errno = 0;
-// 				if (!(inputhash = crypt(passwd, hash)))
-// 					fprintf(stderr, "slock: crypt: %s\n", strerror(errno));
-// 				else
-// 					running = !!strcmp(inputhash, hash);
-// 				if (running) {
-// 					XBell(dpy, 100);
-// 					failure = 1;
-// 				}
-// 				explicit_bzero(&passwd, sizeof(passwd));
-// 				len = 0;
-// 				break;
-// 			case XK_Escape:
-// 				explicit_bzero(&passwd, sizeof(passwd));
-// 				len = 0;
-// 				break;
-// 			case XK_BackSpace:
-// 				if (len)
-// 					passwd[len--] = '\0';
-// 				break;
-// 			default:
-// 				if (num && !iscntrl((int)buf[0]) &&
-// 				    (len + num < sizeof(passwd))) {
-// 					memcpy(passwd + len, buf, num);
-// 					len += num;
-// 				}
-// 				break;
-// 			}
-// 			color = len ? INPUT : ((failure || failonclear) ? FAILED : INIT);
-// 			if (running && oldc != color) {
-// 				for (screen = 0; screen < nscreens; screen++) {
-// 					XSetWindowBackground(dpy,
-// 					                     locks[screen]->win,
-// 					                     locks[screen]->colors[color]);
-// 					XClearWindow(dpy, locks[screen]->win);
-// 					writeMessage(dpy, locks[screen]->win, screen, message, 0, 2);
-// 				}
-// 				oldc = color;
-// 			}
-// 		} else if (rr->active && ev.type == rr->evbase + RRScreenChangeNotify) {
-// 			rre = (XRRScreenChangeNotifyEvent*)&ev;
-// 			for (screen = 0; screen < nscreens; screen++) {
-// 				if (locks[screen]->win == rre->window) {
-// 					XResizeWindow(dpy, locks[screen]->win,
-// 					              rre->width, rre->height);
-// 					XClearWindow(dpy, locks[screen]->win);
-// 				}
-// 			}
-// 		} else for (screen = 0; screen < nscreens; screen++)
-// 			XRaiseWindow(dpy, locks[screen]->win);
-// 	}
-// }
 
 static struct lock *
 lockScreen(Display *dpy, struct xrandr *rr, int screen)
@@ -611,7 +582,7 @@ main(int argc, char **argv) {
 		fprintf(stderr, "slock-"VERSION"\n");
 		return 0;
 	case 'm':
-		message = EARGF(usage());
+		defaultMsg = EARGF(usage());
 		break;
 	default:
 		usage();
@@ -656,6 +627,12 @@ main(int argc, char **argv) {
 	nscreens = ScreenCount(dpy);
 
     /// MOD BY FUS /////////////////////////////////////////////////////////
+    struct displayData displayData;
+
+	fontinfo = XLoadQueryFont(dpy, text_size);
+    if (!fontinfo) return -1;
+
+	printf("[main] nscreens=%d\n\n", nscreens);
     if(nscreens){
 		// printf("[main] nscreens=%d\n", nscreens);
         Window root = RootWindow(dpy, DefaultScreen(dpy));
@@ -665,12 +642,17 @@ main(int argc, char **argv) {
             XRROutputInfo *output_info = XRRGetOutputInfo(dpy, res, res->outputs[i]);
             if (output_info->crtc) {
                 XRRCrtcInfo *crtc_info = XRRGetCrtcInfo(dpy, res, output_info->crtc);
+				// printf("[main] id=%d\n", monInfos.mons);
+				// printf("[main] scrHeight=%d\n", crtc_info->height);
+				// printf("[main] scrWidth=%d\n", 	crtc_info->width);
+				// printf("[main] rowTopLeft=%d\n", crtc_info->y);
+				// printf("[main] colTopLeft=%d\n", crtc_info->x);
+				monInfos.mon[monInfos.mons].id = monInfos.mons;
+                monInfos.mon[monInfos.mons].scrHeight  = crtc_info->height;
+                monInfos.mon[monInfos.mons].scrWidth   = crtc_info->width;
+                monInfos.mon[monInfos.mons].rowTopLeft = crtc_info->y; 
+                monInfos.mon[monInfos.mons].colTopLeft = crtc_info->x;
 				++monInfos.mons;
-				monInfos.mon[i].id = i;
-                monInfos.mon[i].rowTopLeft = crtc_info->y; 
-                monInfos.mon[i].colTopLeft = crtc_info->x;
-                monInfos.mon[i].scrWidth   = crtc_info->width;
-                monInfos.mon[i].scrHeight  = crtc_info->height;
                 XRRFreeCrtcInfo(crtc_info);
             }
             XRRFreeOutputInfo(output_info);
@@ -683,7 +665,10 @@ main(int argc, char **argv) {
 		die("slock: out of memory\n");
 	for (nlocks = 0, s = 0; s < nscreens; s++) {
 		if ((locks[s] = lockScreen(dpy, &rr, s)) != NULL) {
-			writeMessage(dpy, locks[s]->win, s, message, 0, 2);
+			snprintf(myBuff, sizeof(myBuff), "%s", defaultMsg);
+			// writeMessage(dpy, locks[s]->win, s, myBuff, 0, lineCount);
+			drawTime(&displayData);
+			// writeMessage(dpy, locks[screen]->win, screen, infoMsg, 2, lineCount);
 			nlocks++;
 		} else {
 			break;
@@ -694,7 +679,6 @@ main(int argc, char **argv) {
     /// MOD BY FUS /////////////////////////////////////////////////////////
 
     pthread_t timeThread;
-    struct displayData displayData;
     displayData.dpy = dpy;
     displayData.locks = locks;
     displayData.nscreens = nscreens;

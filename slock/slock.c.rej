@@ -12,7 +12,7 @@
  
 @@ -234,16 +280,23 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
  			}
- 			color = len ? INPUT : ((failure || failonclear) ? FAILED : INIT);
+ 			color = len ? INPUT : ((failure || failOnClear) ? FAILED : INIT);
  			if (running && oldc != color) {
 +		        pthread_mutex_lock(&mutex); /*Stop the time refresh thread from interfering*/
  				for (screen = 0; screen < nscreens; screen++) {

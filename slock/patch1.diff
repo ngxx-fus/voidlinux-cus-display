@@ -24,7 +24,7 @@ index 9855e21..eb88b3d 100644
 @@ -10,3 +10,6 @@ static const char *colorname[NUMCOLS] = {
  
  /* treat a cleared input like a wrong password (color) */
- static const int failonclear = 1;
+ static const int failOnClear = 1;
 +
 +/* Background image path, should be available to the user above */
 +static const char* background_image = "";
@@ -71,7 +71,7 @@ index 5ae738c..345a279 100644
  die(const char *errstr, ...)
  {
 @@ -190,9 +194,10 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
- 			color = len ? INPUT : ((failure || failonclear) ? FAILED : INIT);
+ 			color = len ? INPUT : ((failure || failOnClear) ? FAILED : INIT);
  			if (running && oldc != color) {
  				for (screen = 0; screen < nscreens; screen++) {
 -					XSetWindowBackground(dpy,
