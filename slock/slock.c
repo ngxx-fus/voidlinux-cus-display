@@ -31,11 +31,12 @@ char *argv0;
 char myBuff[264];
 unsigned int slockStatus;
 
-#define __mask32(i) 	(1U<<(i))
-#define __inv_mask32(i) (~(1U<<(i)))
-#define __has_mask32(m)	& 	(m)
-#define __set_mask32(m)	|= 	(m)
-#define __clr_mask32(m) &= 	(~(m))
+#define __mask32(i) 	    (1U<<(i))
+#define __inv_mask32(i)     (~(1U<<(i)))
+#define __has_mask32(m)	    & 	(m)
+#define __set_mask32(m)	    |= 	(m)
+#define __clr_mask32(m)     &= 	(~(m))
+#define __is_printable(c)   (0x20 < (c) && (c) < 0x7F)
 
 enum SLOCK_STATUS_MASK{
 	SHOW_PW_MASK = 0x1,
@@ -118,6 +119,11 @@ die(const char *errstr, ...)
 #include <linux/oom.h>
 
 /// MOD BY NGXXFUS /////////////////////////////////////////////////////////
+
+#if (CtrlL_as_ShowHidePW == 1) || (CtrlR_as_ShowHidePW == 1) || \
+	(AltL_as_ShowHidePW  == 1) || (AltL_as_ShowHidePW == 1)
+	#define SHOWHIDE_PW
+#endif
 
 int 		nscreens;
 Display 	*dpy;
@@ -378,6 +384,7 @@ readPW(struct displayData* dispData, struct xrandr *rr, struct lock **locks, int
 			failure = 0;
 			switch (ksym) {
 				case XK_Return:
+					if(!len) break;
 					slockStatus __set_mask32(UPDATE_SCR_MASK);
 					passwd[len] = '\0';
 					errno = 0;
@@ -402,15 +409,28 @@ readPW(struct displayData* dispData, struct xrandr *rr, struct lock **locks, int
 					if (len)
 						passwd[len--] = '\0';
 					break;
-				case XK_Alt_L:
-					slockStatus __set_mask32(UPDATE_SCR_MASK);
-					if(slockStatus __has_mask32(SHOW_PW_MASK))
-						slockStatus __clr_mask32(SHOW_PW_MASK);
-					else 
-						slockStatus __set_mask32(SHOW_PW_MASK);
-					break;
+				#if CtrlL_as_ShowHidePW == 1
+                	case XK_Control_L:
+				#endif
+				#if CtrlR_as_ShowHidePW == 1
+                	case XK_Control_R:
+				#endif
+				#if AltL_as_ShowHidePW == 1
+                	case XK_Alt_L:
+				#endif
+				#if AltR_as_ShowHidePW == 1
+                	case XK_Alt_R:
+				#endif
+				#ifdef SHOWHIDE_PW
+						slockStatus __set_mask32(UPDATE_SCR_MASK);
+						if(slockStatus __has_mask32(SHOW_PW_MASK))
+							slockStatus __clr_mask32(SHOW_PW_MASK);
+						else 
+							slockStatus __set_mask32(SHOW_PW_MASK);
+						break;
+				#endif
 				default:
-					if (num && !iscntrl((int)buf[0]) &&
+					if (num && __is_printable(buf[0]) &&
 						(len + num < sizeof(passwd))) {
 						memcpy(passwd + len, buf, num);
 						len += num;
@@ -632,7 +652,7 @@ main(int argc, char **argv) {
 	fontinfo = XLoadQueryFont(dpy, text_size);
     if (!fontinfo) return -1;
 
-	printf("[main] nscreens=%d\n\n", nscreens);
+	// printf("[main] nscreens=%d\n\n", nscreens);
     if(nscreens){
 		// printf("[main] nscreens=%d\n", nscreens);
         Window root = RootWindow(dpy, DefaultScreen(dpy));

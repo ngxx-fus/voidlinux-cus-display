@@ -2,6 +2,34 @@
 static const char *user  = "fus";
 static const char *group = "fus";
 
+
+/*
+      (0,0)                                             (2176,0)
+        +----------------------------------------------------+
+        |         (256,0)                                    |
+        |           +----------------------------------+     |
+        |           |                                  |     |
+        |           |        	STATUS MSG             |     |
+        |           |          	DATA & TIME            |     |
+        |           |           INFO MESSAGE           |     |
+        |           |           BLANK LINE             |     |
+        |           |         (HDMI 1920x1080)		   |     |
+        |           |                                  |     |
+        |           +----------------------------------+     | (2176, 1080)
+        |(0,1080)                                            |
+        | +-----------------------+                          |
+        | |                       |                          |
+        | |    eDP1(1366x768)     |                          |
+        | |     STATUS MSG        |                          |
+        | |     DATA & TIME       |                          |
+        | |     INFO MESSAGE      |                          |
+        | |     BLANK LINE        |                          |
+        | |                       |                          |
+        | +-----------------------+                          | (1366, 1848)
+        +----------------------------------------------------+
+                                                      (2176, 1848)
+ */
+
 /*
 ###############################################
 #											  #
@@ -27,12 +55,17 @@ static const char * text_color = "#ffffff";
 static const float 	alpha = 0.5;		// lock screen opacity
 static const int    lineHeight 	= 0;	// height of line
 static const int    lineCount 	= 4;	// number of lines
-static const int 	failOnClear = 1;	// treat a cleared input like a wrong password (color)
+static const int 	failOnClear = 0;	// treat a cleared input like a wrong password (color)
 static const char * defaultMsg  = "Enter password to continue!";
 static const char * wrongPWMsg 	= "Wrong password!";
 static const char * infoMsg 	= "Nguyen Thanh Phu - 0845939722 - msnp@outlook.com.vn";
 static const char * blankMsg 	= " "; 
 static const char * text_size 	= "10x20";// text size (must be a valid size)
+
+#define CtrlL_as_ShowHidePW 	1	/// Default
+#define CtrlR_as_ShowHidePW 	0
+#define AltL_as_ShowHidePW 		0
+#define AltR_as_ShowHidePW 		0
 
 /*This is the hidden pw pattern*/
 /*DO NOT CHANGE!*/
